@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sats P2P</title>
+<meta name="theme-color" content="#0b0b0c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<style>
+/* Layout: una sola columna tipo "terminal de mano"; precio arriba, entradas, resultado grande abajo */
+:root{
+  --bg:#0b0b0c; --panel:#141416; --panel-2:#1b1b1f; --line:#2a2a2f;
+  --fg:#ecebe8; --muted:#8c8a86; --orange:#f7931a; --orange-dim:#7a4a0f;
+  --ok:#4fd18b; --warn:#ff6b4a;
+  --display:"Chakra Petch",ui-sans-serif,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{
+  background:
+    radial-gradient(120% 60% at 50% -10%, #2a1a06 0%, transparent 55%),
+    repeating-linear-gradient(0deg, transparent 0 31px, #ffffff06 31px 32px),
+    var(--bg);
+  color:var(--fg); font:15px/1.45 var(--display);
+  padding-top:max(12px, env(safe-area-inset-top,0px));
+  padding-bottom:max(20px, env(safe-area-inset-bottom,0px));
+  padding-left:max(16px, env(safe-area-inset-left,0px));
+  padding-right:max(16px, env(safe-area-inset-right,0px));
+  -webkit-tap-highlight-color:transparent;
+}
+.app{max-width:460px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+
+header{display:flex;align-items:center;justify-content:space-between;padding-block:4px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:13px}
+.brand svg{width:26px;height:26px}
+.brand b{color:var(--orange)}
+.status{font:11px var(--mono);color:var(--muted);display:flex;align-items:center;gap:6px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.dot.live{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.dot.err{background:var(--warn)}
+.dot.lock{background:var(--orange);box-shadow:0 0 8px var(--orange)}
+
+/* Precio */
+.price{
+  background:var(--panel);border:1px solid var(--line);border-radius:4px;
+  padding:14px 16px;display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;
+  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px));
+}
+.label{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.price-val{font:700 28px/1.1 var(--mono);font-variant-numeric:tabular-nums;color:var(--fg);grid-column:1;min-width:0;overflow-wrap:anywhere}
+.price-val small{font-size:15px;color:var(--muted);font-weight:400}
+.price-meta{font:11px var(--mono);color:var(--muted);grid-column:1}
+.price-actions{grid-column:2;grid-row:1/4;display:flex;flex-direction:column;gap:8px}
+.icon-btn{
+  width:44px;height:44px;border-radius:4px;border:1px solid var(--line);background:var(--panel-2);
+  color:var(--fg);display:grid;place-items:center;cursor:pointer;
+}
+.icon-btn svg{width:20px;height:20px}
+.icon-btn[aria-pressed="true"]{border-color:var(--orange);color:var(--orange);background:#2a1a06}
+.icon-btn.spin svg{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.manual{display:flex;gap:8px;grid-column:1/-1;margin-top:8px}
+
+/* Segmentado compra/venta */
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:4px;gap:4px}
+.seg button{
+  font:600 15px var(--display);letter-spacing:.1em;text-transform:uppercase;
+  border:0;border-radius:2px;padding:14px 8px;background:transparent;color:var(--muted);cursor:pointer;
+}
+.seg button[aria-pressed="true"]{background:var(--orange);color:#140b00}
+.seg button span{display:block;font:400 11px var(--mono);letter-spacing:0;text-transform:none;opacity:.8;margin-top:2px}
+
+/* Campos */
+.fields{display:grid;grid-template-columns:1fr;gap:12px}
+.field{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px 14px 12px}
+.field:focus-within{border-color:var(--orange)}
+.field .row{display:flex;align-items:baseline;gap:8px}
+.field input{
+  flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--fg);
+  font:700 30px/1.2 var(--mono);font-variant-numeric:tabular-nums;padding:4px 0 0;
+}
+.field input::placeholder{color:#3d3c3a}
+.unit{font:600 18px var(--mono);color:var(--orange)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{
+  font:600 12px var(--mono);padding:7px 10px;border-radius:2px;border:1px solid var(--line);
+  background:var(--panel-2);color:var(--muted);cursor:pointer;
+}
+.chip:active{border-color:var(--orange);color:var(--orange)}
+
+/* Resultado */
+.result{
+  position:relative;border:1px solid var(--orange-dim);border-radius:4px;padding:16px;
+  background:linear-gradient(180deg,#1c1205 0%, var(--panel) 70%);
+  clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);
+}
+.result .label{color:var(--orange)}
+.sats{
+  font:700 clamp(34px,11vw,52px)/1.05 var(--mono);font-variant-numeric:tabular-nums;
+  color:var(--fg);margin:6px 0 2px;overflow-wrap:anywhere;
+}
+.sats .u{font-size:.42em;color:var(--orange);margin-left:6px}
+.btc{font:14px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.copy{
+  margin-top:12px;width:100%;padding:13px;border-radius:2px;border:1px solid var(--orange);
+  background:transparent;color:var(--orange);font:600 14px var(--display);letter-spacing:.12em;text-transform:uppercase;cursor:pointer;
+}
+.copy.done{background:var(--orange);color:#140b00}
+.break{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;display:grid;gap:7px}
+.break div{display:flex;justify-content:space-between;gap:12px;font:13px var(--mono);font-variant-numeric:tabular-nums}
+.break dt{color:var(--muted)}
+.break dd{margin:0;text-align:right}
+.hint{font:12px/1.5 var(--display);color:var(--muted);text-align:center;padding-inline:8px}
+.small-input{
+  flex:1;min-width:0;background:var(--panel-2);border:1px solid var(--line);border-radius:2px;color:var(--fg);
+  font:600 16px var(--mono);padding:10px;
+}
+.small-btn{padding:10px 14px;border-radius:2px;border:1px solid var(--orange);background:transparent;color:var(--orange);font:600 13px var(--display);letter-spacing:.08em;text-transform:uppercase}
+button:focus-visible,input:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.icon-btn.spin svg{animation:none}}
+</style>
+</head>
+<body>
+<main class="app">
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 512 512" aria-hidden="true"><circle cx="256" cy="256" r="178" fill="none" stroke="#f7931a" stroke-width="34"/><g stroke="#f7931a" stroke-width="40" stroke-linecap="round"><path d="M256 140v232M180 206h152M180 256h152M180 306h152"/></g></svg>
+      <span>Sats <b>P2P</b></span>
+    </div>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">conectando…</span></div>
+  </header>
+
+  <section class="price" aria-live="polite">
+    <div class="label">BTC / EUR · mercado</div>
+    <div class="price-val" id="price">—</div>
+    <div class="price-meta" id="priceMeta">obteniendo precio…</div>
+    <div class="price-actions">
+      <button class="icon-btn" id="refresh" aria-label="Actualizar precio">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
+      </button>
+      <button class="icon-btn" id="lock" aria-pressed="false" aria-label="Fijar precio">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="1"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      </button>
+    </div>
+    <div class="manual" id="manual" hidden>
+      <input class="small-input" id="manualPrice" inputmode="decimal" placeholder="Precio manual €">
+      <button class="small-btn" id="manualSet">Usar</button>
+    </div>
+  </section>
+
+  <div class="seg" role="group" aria-label="Tipo de operación">
+    <button id="opBuy" aria-pressed="true">Compra<span>recibo sats</span></button>
+    <button id="opSell" aria-pressed="false">Venta<span>envío sats</span></button>
+  </div>
+
+  <div class="fields">
+    <label class="field">
+      <span class="label">Importe del trato</span>
+      <span class="row"><input id="eur" inputmode="decimal" autocomplete="off" placeholder="0" value="100"><span class="unit">€</span></span>
+      <span class="chips">
+        <button type="button" class="chip" data-eur="50">50</button>
+        <button type="button" class="chip" data-eur="100">100</button>
+        <button type="button" class="chip" data-eur="200">200</button>
+        <button type="button" class="chip" data-eur="500">500</button>
+        <button type="button" class="chip" data-eur="1000">1000</button>
+      </span>
+    </label>
+    <label class="field">
+      <span class="label">Comisión / prima</span>
+      <span class="row"><input id="fee" inputmode="decimal" autocomplete="off" placeholder="0" value="3"><span class="unit">%</span></span>
+      <span class="chips">
+        <button type="button" class="chip" data-fee="0">0</button>
+        <button type="button" class="chip" data-fee="1">1</button>
+        <button type="button" class="chip" data-fee="2">2</button>
+        <button type="button" class="chip" data-fee="3">3</button>
+        <button type="button" class="chip" data-fee="5">5</button>
+      </span>
+    </label>
+  </div>
+
+  <section class="result" aria-live="polite">
+    <div class="label" id="resLabel">Sats a recibir</div>
+    <div class="sats"><span id="sats">—</span><span class="u">sats</span></div>
+    <div class="btc" id="btc">— BTC</div>
+    <button class="copy" id="copy">Copiar cantidad</button>
+    <dl class="break">
+      <div><dt>Precio pactado</dt><dd id="tradePrice">—</dd></div>
+      <div><dt>A precio de mercado</dt><dd id="marketSats">—</dd></div>
+      <div><dt id="feeLabel">Comisión en sats</dt><dd id="feeSats">—</dd></div>
+      <div><dt>Comisión en €</dt><dd id="feeEur">—</dd></div>
+    </dl>
+  </section>
+
+  <p class="hint">La comisión se aplica sobre el precio de mercado. Usa un % negativo si es un descuento. Fija el precio con el candado para que no cambie durante el trato.</p>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const fmtInt = n => Math.round(n).toLocaleString('es-ES');
+  const fmtEur = n => n.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €';
+  const num = s => { const v = parseFloat(String(s).replace(/\s/g,'').replace(',', '.')); return isFinite(v) ? v : NaN; };
+
+  const store = {
+    get(k,d){ try{ const v = localStorage.getItem('satsp2p.'+k); return v===null?d:JSON.parse(v);}catch{ return d; } },
+    set(k,v){ try{ localStorage.setItem('satsp2p.'+k, JSON.stringify(v)); }catch{} }
+  };
+
+  let price = store.get('lastPrice', null);
+  let priceTime = store.get('lastPriceTime', null);
+  let source = store.get('lastSource', '');
+  let locked = false;
+  let op = store.get('op','buy');
+  $('fee').value = store.get('fee', 3);
+
+  // Fuentes con CORS abierto, en orden de preferencia
+  const SOURCES = [
+    { name:'CoinGecko', url:'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur', pick:j=>j.bitcoin.eur },
+    { name:'Coinbase',  url:'https://api.coinbase.com/v2/prices/BTC-EUR/spot', pick:j=>+j.data.amount },
+    { name:'Binance',   url:'https://api.binance.com/api/v3/ticker/price?symbol=BTCEUR', pick:j=>+j.price },
+  ];
+
+  async function fetchPrice(){
+    if (locked) return;
+    $('refresh').classList.add('spin');
+    for (const s of SOURCES){
+      try{
+        const ctrl = new AbortController(); const t = setTimeout(()=>ctrl.abort(), 6000);
+        const r = await fetch(s.url,{signal:ctrl.signal,cache:'no-store'}); clearTimeout(t);
+        if(!r.ok) throw 0;
+        const p = s.pick(await r.json());
+        if(!(p>0)) throw 0;
+        price = p; priceTime = Date.now(); source = s.name;
+        store.set('lastPrice',price); store.set('lastPriceTime',priceTime); store.set('lastSource',source);
+        setStatus('live','en vivo'); $('manual').hidden = true;
+        $('refresh').classList.remove('spin'); render(); return;
+      }catch(e){}
+    }
+    $('refresh').classList.remove('spin');
+    setStatus('err','sin conexión'); $('manual').hidden = false; render();
+  }
+
+  function setStatus(kind, txt){
+    $('dot').className = 'dot ' + kind; $('statusTxt').textContent = txt;
+  }
+
+  function ago(t){
+    if(!t) return '';
+    const s = Math.round((Date.now()-t)/1000);
+    if (s < 60) return `hace ${s}s`;
+    const m = Math.round(s/60); if (m < 60) return `hace ${m} min`;
+    return new Date(t).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  }
+
+  function render(){
+    const buy = op === 'buy';
+    $('opBuy').setAttribute('aria-pressed', buy); $('opSell').setAttribute('aria-pressed', !buy);
+    $('resLabel').textContent = buy ? 'Sats a recibir' : 'Sats a enviar';
+    $('feeLabel').textContent = buy ? 'Comisión que pagas (sats)' : 'Comisión que cobras (sats)';
+
+    if (price){
+      $('price').innerHTML = fmtInt(price) + ' <small>€</small>';
+      $('priceMeta').textContent = (source ? source + ' · ' : '') + ago(priceTime) + (locked ? ' · fijado' : '');
+    }
+
+    const eur = num($('eur').value), fee = num($('fee').value);
+    if (!price || !(eur > 0) || isNaN(fee) || fee <= -100){
+      ['sats','tradePrice','marketSats','feeSats','feeEur'].forEach(id=>$(id).textContent='—');
+      $('btc').textContent = '— BTC'; return;
+    }
+    const tradePrice = price * (1 + fee/100);
+    const sats = Math.floor(eur / tradePrice * 1e8);           // redondeo hacia abajo: nunca más sats de los pagados
+    const marketSats = Math.floor(eur / price * 1e8);
+    const feeSats = marketSats - sats;
+
+    $('sats').textContent = fmtInt(sats);
+    $('btc').textContent = (sats/1e8).toFixed(8).replace('.', ',') + ' BTC';
+    $('tradePrice').textContent = fmtInt(tradePrice) + ' €';
+    $('marketSats').textContent = fmtInt(marketSats) + ' sats';
+    $('feeSats').textContent = fmtInt(feeSats) + ' sats';
+    $('feeEur').textContent = fmtEur(eur - eur/(1+fee/100));
+    $('copy').dataset.value = String(sats);
+  }
+
+  // Eventos
+  $('opBuy').onclick = () => { op='buy'; store.set('op',op); render(); };
+  $('opSell').onclick = () => { op='sell'; store.set('op',op); render(); };
+  $('eur').oninput = render;
+  $('fee').oninput = () => { const f=num($('fee').value); if(!isNaN(f)) store.set('fee',f); render(); };
+  document.querySelectorAll('[data-eur]').forEach(b => b.onclick = e => { e.preventDefault(); $('eur').value=b.dataset.eur; render(); });
+  document.querySelectorAll('[data-fee]').forEach(b => b.onclick = e => { e.preventDefault(); $('fee').value=b.dataset.fee; store.set('fee',+b.dataset.fee); render(); });
+  $('refresh').onclick = () => { if(locked){ toggleLock(); } fetchPrice(); };
+  $('lock').onclick = toggleLock;
+  function toggleLock(){
+    locked = !locked; $('lock').setAttribute('aria-pressed', locked);
+    if (locked) setStatus('lock','precio fijado'); else { setStatus('', 'actualizando…'); fetchPrice(); }
+    render();
+  }
+  $('manualSet').onclick = () => {
+    const p = num($('manualPrice').value); if(!(p>0)) return;
+    price = p; priceTime = Date.now(); source = 'manual'; render();
+  };
+  $('copy').onclick = async () => {
+    const v = $('copy').dataset.value; if(!v) return;
+    try{ await navigator.clipboard.writeText(v); }catch{
+      const r = document.createRange(); r.selectNodeContents($('sats'));
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    }
+    $('copy').classList.add('done'); $('copy').textContent = 'Copiado: ' + fmtInt(+v) + ' sats';
+    setTimeout(()=>{ $('copy').classList.remove('done'); $('copy').textContent='Copiar cantidad'; }, 1600);
+  };
+  [$('eur'),$('fee')].forEach(i => i.addEventListener('focus', () => i.select()));
+
+  render();
+  fetchPrice();
+  setInterval(() => { if(!document.hidden) fetchPrice(); }, 30000);
+  setInterval(() => { if(price) render(); }, 10000);
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) fetchPrice(); });
+
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+})();
+</script>
+</body>
+</html>
