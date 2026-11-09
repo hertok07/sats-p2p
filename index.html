@@ -21,6 +21,7 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;min-height:100%}
 body{
   background:
@@ -80,9 +81,9 @@ header{display:flex;align-items:center;justify-content:space-between;padding-blo
 .fields{display:grid;grid-template-columns:1fr;gap:12px}
 .field{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px 14px 12px}
 .field:focus-within{border-color:var(--orange)}
-.field .row{display:flex;align-items:baseline;gap:8px}
+.field .row{display:flex;width:100%;align-items:baseline;gap:8px}
 .field input{
-  flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--fg);
+  flex:1 1 0;width:0;min-width:0;background:transparent;border:0;outline:0;color:var(--fg);
   font:700 30px/1.2 var(--mono);font-variant-numeric:tabular-nums;padding:4px 0 0;
 }
 .field input::placeholder{color:#3d3c3a}
@@ -124,6 +125,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding-blo
 .small-btn{padding:10px 14px;border-radius:2px;border:1px solid var(--orange);background:transparent;color:var(--orange);font:600 13px var(--display);letter-spacing:.08em;text-transform:uppercase}
 button:focus-visible,input:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){.icon-btn.spin svg{animation:none}}
+.seg.asset button[aria-pressed="true"]{background:var(--fg);color:#0b0b0c}
+.seg.asset button{padding:10px 8px;font-size:14px}
+.usdc-mark{display:inline-block;width:9px;height:9px;border-radius:50%;background:#2775ca;margin-right:6px;vertical-align:1px}
+.btc-mark{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--orange);margin-right:6px;vertical-align:1px}
 </style>
 </head>
 <body>
@@ -136,8 +141,13 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--orange);outline
     <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">conectando…</span></div>
   </header>
 
+  <div class="seg asset" role="group" aria-label="Activo">
+    <button id="assetBtc" aria-pressed="true"><i class="btc-mark"></i>Bitcoin</button>
+    <button id="assetUsdc" aria-pressed="false"><i class="usdc-mark"></i>USDC</button>
+  </div>
+
   <section class="price" aria-live="polite">
-    <div class="label">BTC / EUR · mercado</div>
+    <div class="label" id="priceLabel">BTC / EUR · mercado</div>
     <div class="price-val" id="price">—</div>
     <div class="price-meta" id="priceMeta">obteniendo precio…</div>
     <div class="price-actions">
@@ -155,8 +165,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--orange);outline
   </section>
 
   <div class="seg" role="group" aria-label="Tipo de operación">
-    <button id="opBuy" aria-pressed="true">Compra<span>recibo sats</span></button>
-    <button id="opSell" aria-pressed="false">Venta<span>envío sats</span></button>
+    <button id="opBuy" aria-pressed="true">Compra<span id="opBuySub">recibo sats</span></button>
+    <button id="opSell" aria-pressed="false">Venta<span id="opSellSub">envío sats</span></button>
   </div>
 
   <div class="fields">
@@ -176,6 +186,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--orange);outline
       <span class="row"><input id="fee" inputmode="decimal" autocomplete="off" placeholder="0" value="3"><span class="unit">%</span></span>
       <span class="chips">
         <button type="button" class="chip" data-fee="0">0</button>
+        <button type="button" class="chip" data-fee="0.5">0,5</button>
         <button type="button" class="chip" data-fee="1">1</button>
         <button type="button" class="chip" data-fee="2">2</button>
         <button type="button" class="chip" data-fee="3">3</button>
@@ -186,13 +197,13 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--orange);outline
 
   <section class="result" aria-live="polite">
     <div class="label" id="resLabel">Sats a recibir</div>
-    <div class="sats"><span id="sats">—</span><span class="u">sats</span></div>
+    <div class="sats"><span id="sats">—</span><span class="u" id="resUnit">sats</span></div>
     <div class="btc" id="btc">— BTC</div>
     <button class="copy" id="copy">Copiar cantidad</button>
     <dl class="break">
       <div><dt>Precio pactado</dt><dd id="tradePrice">—</dd></div>
       <div><dt>A precio de mercado</dt><dd id="marketSats">—</dd></div>
-      <div><dt id="feeLabel">Comisión en sats</dt><dd id="feeSats">—</dd></div>
+      <div><dt id="feeLabel">Comisión</dt><dd id="feeSats">—</dd></div>
       <div><dt>Comisión en €</dt><dd id="feeEur">—</dd></div>
     </dl>
   </section>
@@ -203,52 +214,76 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--orange);outline
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const fmtInt = n => Math.round(n).toLocaleString('es-ES');
-  const fmtEur = n => n.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €';
+  const fmtNum = (n, d=0) => n.toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d});
+  const fmtEur = n => fmtNum(n,2) + ' €';
   const num = s => { const v = parseFloat(String(s).replace(/\s/g,'').replace(',', '.')); return isFinite(v) ? v : NaN; };
+  const floorTo = (n, d) => Math.floor(n * 10**d + 1e-9) / 10**d;
 
   const store = {
     get(k,d){ try{ const v = localStorage.getItem('satsp2p.'+k); return v===null?d:JSON.parse(v);}catch{ return d; } },
     set(k,v){ try{ localStorage.setItem('satsp2p.'+k, JSON.stringify(v)); }catch{} }
   };
 
-  let price = store.get('lastPrice', null);
-  let priceTime = store.get('lastPriceTime', null);
-  let source = store.get('lastSource', '');
-  let locked = false;
+  // Configuración por activo. Fuentes con CORS abierto, en orden de preferencia.
+  const ASSETS = {
+    btc: {
+      label:'BTC / EUR · mercado', priceDec:0, defFee:3,
+      sources:[
+        { name:'CoinGecko', url:'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur', pick:j=>j.bitcoin.eur },
+        { name:'Coinbase',  url:'https://api.coinbase.com/v2/prices/BTC-EUR/spot', pick:j=>+j.data.amount },
+        { name:'Binance',   url:'https://api.binance.com/api/v3/ticker/price?symbol=BTCEUR', pick:j=>+j.price },
+      ],
+    },
+    usdc: {
+      label:'USDC / EUR · mercado', priceDec:4, defFee:1,
+      sources:[
+        { name:'CoinGecko', url:'https://api.coingecko.com/api/v3/simple/price?ids=usd-coin&vs_currencies=eur', pick:j=>j['usd-coin'].eur },
+        { name:'Coinbase',  url:'https://api.coinbase.com/v2/prices/USDC-EUR/spot', pick:j=>+j.data.amount },
+        { name:'Kraken',    url:'https://api.kraken.com/0/public/Ticker?pair=USDCEUR', pick:j=>+Object.values(j.result)[0].c[0] },
+        { name:'Binance',   url:'https://api.binance.com/api/v3/ticker/price?symbol=EURUSDC', pick:j=>1/(+j.price) },
+      ],
+    },
+  };
+
+  // Estado por activo: precio, hora, fuente, candado y comisión
+  const st = {};
+  for (const k of Object.keys(ASSETS)) {
+    st[k] = {
+      price: store.get(k+'.price', k==='btc' ? store.get('lastPrice', null) : null),
+      time:  store.get(k+'.time',  k==='btc' ? store.get('lastPriceTime', null) : null),
+      source:store.get(k+'.source',k==='btc' ? store.get('lastSource', '') : ''),
+      fee:   store.get(k+'.fee',   k==='btc' ? store.get('fee', ASSETS[k].defFee) : ASSETS[k].defFee),
+      locked:false, ok:false,
+    };
+  }
+  let asset = store.get('asset','btc'); if (!ASSETS[asset]) asset = 'btc';
   let op = store.get('op','buy');
-  $('fee').value = store.get('fee', 3);
+  const cur = () => st[asset];
+  $('fee').value = cur().fee;
 
-  // Fuentes con CORS abierto, en orden de preferencia
-  const SOURCES = [
-    { name:'CoinGecko', url:'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur', pick:j=>j.bitcoin.eur },
-    { name:'Coinbase',  url:'https://api.coinbase.com/v2/prices/BTC-EUR/spot', pick:j=>+j.data.amount },
-    { name:'Binance',   url:'https://api.binance.com/api/v3/ticker/price?symbol=BTCEUR', pick:j=>+j.price },
-  ];
-
-  async function fetchPrice(){
-    if (locked) return;
-    $('refresh').classList.add('spin');
-    for (const s of SOURCES){
+  async function fetchPrice(k = asset){
+    const s = st[k];
+    if (s.locked) return;
+    if (k===asset) $('refresh').classList.add('spin');
+    for (const src of ASSETS[k].sources){
       try{
         const ctrl = new AbortController(); const t = setTimeout(()=>ctrl.abort(), 6000);
-        const r = await fetch(s.url,{signal:ctrl.signal,cache:'no-store'}); clearTimeout(t);
+        const r = await fetch(src.url,{signal:ctrl.signal,cache:'no-store'}); clearTimeout(t);
         if(!r.ok) throw 0;
-        const p = s.pick(await r.json());
-        if(!(p>0)) throw 0;
-        price = p; priceTime = Date.now(); source = s.name;
-        store.set('lastPrice',price); store.set('lastPriceTime',priceTime); store.set('lastSource',source);
-        setStatus('live','en vivo'); $('manual').hidden = true;
-        $('refresh').classList.remove('spin'); render(); return;
+        const p = src.pick(await r.json());
+        if(!(p>0) || !isFinite(p)) throw 0;
+        s.price = p; s.time = Date.now(); s.source = src.name; s.ok = true;
+        store.set(k+'.price',p); store.set(k+'.time',s.time); store.set(k+'.source',s.source);
+        if (k===asset){ $('refresh').classList.remove('spin'); }
+        render(); return;
       }catch(e){}
     }
-    $('refresh').classList.remove('spin');
-    setStatus('err','sin conexión'); $('manual').hidden = false; render();
+    s.ok = false;
+    if (k===asset) $('refresh').classList.remove('spin');
+    render();
   }
 
-  function setStatus(kind, txt){
-    $('dot').className = 'dot ' + kind; $('statusTxt').textContent = txt;
-  }
+  function setStatus(kind, txt){ $('dot').className = 'dot ' + kind; $('statusTxt').textContent = txt; }
 
   function ago(t){
     if(!t) return '';
@@ -259,68 +294,99 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--orange);outline
   }
 
   function render(){
-    const buy = op === 'buy';
-    $('opBuy').setAttribute('aria-pressed', buy); $('opSell').setAttribute('aria-pressed', !buy);
-    $('resLabel').textContent = buy ? 'Sats a recibir' : 'Sats a enviar';
-    $('feeLabel').textContent = buy ? 'Comisión que pagas (sats)' : 'Comisión que cobras (sats)';
+    const A = ASSETS[asset], s = cur(), isBtc = asset === 'btc', buy = op === 'buy';
+    const unit = isBtc ? 'sats' : 'USDC';
 
-    if (price){
-      $('price').innerHTML = fmtInt(price) + ' <small>€</small>';
-      $('priceMeta').textContent = (source ? source + ' · ' : '') + ago(priceTime) + (locked ? ' · fijado' : '');
-    }
+    $('assetBtc').setAttribute('aria-pressed', isBtc); $('assetUsdc').setAttribute('aria-pressed', !isBtc);
+    $('opBuy').setAttribute('aria-pressed', buy); $('opSell').setAttribute('aria-pressed', !buy);
+    $('opBuySub').textContent = 'recibo ' + unit; $('opSellSub').textContent = 'envío ' + unit;
+    $('resLabel').textContent = (isBtc ? 'Sats' : 'USDC') + (buy ? ' a recibir' : ' a enviar');
+    $('resUnit').textContent = unit;
+    $('feeLabel').textContent = buy ? `Comisión que pagas (${unit})` : `Comisión que cobras (${unit})`;
+    $('priceLabel').textContent = A.label;
+    $('lock').setAttribute('aria-pressed', s.locked);
+    $('manual').hidden = s.ok || s.locked;
+
+    if (s.locked) setStatus('lock','precio fijado');
+    else if (s.ok) setStatus('live','en vivo');
+    else setStatus(s.price ? 'err' : '', s.price ? 'sin conexión' : 'conectando…');
+
+    if (s.price){
+      $('price').innerHTML = fmtNum(s.price, A.priceDec) + ' <small>€</small>';
+      $('priceMeta').textContent = (s.source ? s.source + ' · ' : '') + ago(s.time) + (s.locked ? ' · fijado' : '')
+        + (isBtc ? '' : ' · 1 € = ' + fmtNum(1/s.price, 4) + ' USDC');
+    } else { $('price').textContent = '—'; $('priceMeta').textContent = 'obteniendo precio…'; }
 
     const eur = num($('eur').value), fee = num($('fee').value);
-    if (!price || !(eur > 0) || isNaN(fee) || fee <= -100){
+    if (!s.price || !(eur > 0) || isNaN(fee) || fee <= -100){
       ['sats','tradePrice','marketSats','feeSats','feeEur'].forEach(id=>$(id).textContent='—');
-      $('btc').textContent = '— BTC'; return;
+      $('btc').textContent = isBtc ? '— BTC' : '—'; delete $('copy').dataset.value; return;
     }
-    const tradePrice = price * (1 + fee/100);
-    const sats = Math.floor(eur / tradePrice * 1e8);           // redondeo hacia abajo: nunca más sats de los pagados
-    const marketSats = Math.floor(eur / price * 1e8);
-    const feeSats = marketSats - sats;
+    const tradePrice = s.price * (1 + fee/100);
+    const feeEur = eur - eur/(1+fee/100);
 
-    $('sats').textContent = fmtInt(sats);
-    $('btc').textContent = (sats/1e8).toFixed(8).replace('.', ',') + ' BTC';
-    $('tradePrice').textContent = fmtInt(tradePrice) + ' €';
-    $('marketSats').textContent = fmtInt(marketSats) + ' sats';
-    $('feeSats').textContent = fmtInt(feeSats) + ' sats';
-    $('feeEur').textContent = fmtEur(eur - eur/(1+fee/100));
-    $('copy').dataset.value = String(sats);
+    if (isBtc){
+      const sats = Math.floor(eur / tradePrice * 1e8);   // redondeo hacia abajo
+      const market = Math.floor(eur / s.price * 1e8);
+      $('sats').textContent = fmtNum(sats);
+      $('btc').textContent = (sats/1e8).toFixed(8).replace('.', ',') + ' BTC';
+      $('tradePrice').textContent = fmtNum(tradePrice) + ' €';
+      $('marketSats').textContent = fmtNum(market) + ' sats';
+      $('feeSats').textContent = fmtNum(market - sats) + ' sats';
+      $('copy').dataset.value = String(sats);
+      $('copy').dataset.label = fmtNum(sats) + ' sats';
+    } else {
+      const usdc = floorTo(eur / tradePrice, 2);          // céntimos de USDC, hacia abajo
+      const market = floorTo(eur / s.price, 2);
+      $('sats').textContent = fmtNum(usdc, 2);
+      $('btc').textContent = 'Tipo pactado: 1 € = ' + fmtNum(1/tradePrice, 4) + ' USDC';
+      $('tradePrice').textContent = fmtNum(tradePrice, 4) + ' € / USDC';
+      $('marketSats').textContent = fmtNum(market, 2) + ' USDC';
+      $('feeSats').textContent = fmtNum(market - usdc, 2) + ' USDC';
+      $('copy').dataset.value = usdc.toFixed(2);
+      $('copy').dataset.label = fmtNum(usdc, 2) + ' USDC';
+    }
+    $('feeEur').textContent = fmtEur(feeEur);
+  }
+
+  function setAsset(k){
+    asset = k; store.set('asset', k);
+    $('fee').value = cur().fee;
+    render();
+    if (!cur().locked && (!cur().time || Date.now() - cur().time > 15000)) fetchPrice(k);
   }
 
   // Eventos
+  $('assetBtc').onclick = () => setAsset('btc');
+  $('assetUsdc').onclick = () => setAsset('usdc');
   $('opBuy').onclick = () => { op='buy'; store.set('op',op); render(); };
   $('opSell').onclick = () => { op='sell'; store.set('op',op); render(); };
   $('eur').oninput = render;
-  $('fee').oninput = () => { const f=num($('fee').value); if(!isNaN(f)) store.set('fee',f); render(); };
+  const saveFee = f => { cur().fee = f; store.set(asset+'.fee', f); };
+  $('fee').oninput = () => { const f=num($('fee').value); if(!isNaN(f)) saveFee(f); render(); };
   document.querySelectorAll('[data-eur]').forEach(b => b.onclick = e => { e.preventDefault(); $('eur').value=b.dataset.eur; render(); });
-  document.querySelectorAll('[data-fee]').forEach(b => b.onclick = e => { e.preventDefault(); $('fee').value=b.dataset.fee; store.set('fee',+b.dataset.fee); render(); });
-  $('refresh').onclick = () => { if(locked){ toggleLock(); } fetchPrice(); };
-  $('lock').onclick = toggleLock;
-  function toggleLock(){
-    locked = !locked; $('lock').setAttribute('aria-pressed', locked);
-    if (locked) setStatus('lock','precio fijado'); else { setStatus('', 'actualizando…'); fetchPrice(); }
-    render();
-  }
+  document.querySelectorAll('[data-fee]').forEach(b => b.onclick = e => { e.preventDefault(); $('fee').value=b.dataset.fee.replace('.',','); saveFee(+b.dataset.fee); render(); });
+  $('refresh').onclick = () => { cur().locked = false; fetchPrice(); };
+  $('lock').onclick = () => { const s = cur(); s.locked = !s.locked; render(); if(!s.locked) fetchPrice(); };
   $('manualSet').onclick = () => {
     const p = num($('manualPrice').value); if(!(p>0)) return;
-    price = p; priceTime = Date.now(); source = 'manual'; render();
+    const s = cur(); s.price = p; s.time = Date.now(); s.source = 'manual'; render();
   };
   $('copy').onclick = async () => {
     const v = $('copy').dataset.value; if(!v) return;
     try{ await navigator.clipboard.writeText(v); }catch{
       const r = document.createRange(); r.selectNodeContents($('sats'));
-      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
     }
-    $('copy').classList.add('done'); $('copy').textContent = 'Copiado: ' + fmtInt(+v) + ' sats';
+    $('copy').classList.add('done'); $('copy').textContent = 'Copiado: ' + $('copy').dataset.label;
     setTimeout(()=>{ $('copy').classList.remove('done'); $('copy').textContent='Copiar cantidad'; }, 1600);
   };
-  [$('eur'),$('fee')].forEach(i => i.addEventListener('focus', () => i.select()));
+  [$('eur'),$('fee'),$('manualPrice')].forEach(i => i.addEventListener('focus', () => i.select()));
 
   render();
   fetchPrice();
   setInterval(() => { if(!document.hidden) fetchPrice(); }, 30000);
-  setInterval(() => { if(price) render(); }, 10000);
+  setInterval(() => { if(cur().price) render(); }, 10000);
   document.addEventListener('visibilitychange', () => { if(!document.hidden) fetchPrice(); });
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

@@ -1,5 +1,5 @@
 // Guarda la app para que abra sin conexión. El precio siempre se pide a la red.
-const CACHE = 'sats-p2p-v1';
+const CACHE = 'sats-p2p-v2';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
